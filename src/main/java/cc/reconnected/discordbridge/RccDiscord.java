@@ -190,7 +190,7 @@ public class RccDiscord implements ModInitializer {
                 .setAllowedMentions(
                         new AllowedMentions()
                                 .withParseUsers(true)
-                                .withParseRoles(true)
+                                .withParseRoles(false)
                                 .withParseEveryone(false)
                 )
                 .build();
