@@ -21,6 +21,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.util.EnumSet;
 
@@ -64,12 +65,12 @@ public class Client {
         return guild;
     }
 
-    public Role role() {
+    public @org.jspecify.annotations.Nullable Role getRole() {
         return role;
     }
 
-    public boolean isReady() {
-        return isReady;
+    public boolean isNotReady() {
+        return !isReady;
     }
 
     private void initialize() {
@@ -137,7 +138,7 @@ public class Client {
         }
 
         @Override
-        public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
+        public void onSlashCommandInteraction(@NonNull SlashCommandInteractionEvent event) {
             if(RccDiscord.CONFIG.enableSlashCommands)
                 events.onSlashCommandInteraction(event);
         }

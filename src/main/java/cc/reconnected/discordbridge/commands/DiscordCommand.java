@@ -44,6 +44,10 @@ public class DiscordCommand {
                                 return 1;
                             }
                             var player = context.getSource().getPlayer();
+                            if (player == null) {
+                                context.getSource().sendFeedback(() -> Text.of("This command can only be executed by players."), false);
+                                return 1;
+                            }
                             var playerData = PlayerMeta.getPlayer(player);
                             if (playerData.get(PlayerMeta.KEYS.discordId) != null) {
                                 context.getSource().sendFeedback(() -> Text.literal("You already linked your Discord profile!").setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
@@ -77,6 +81,10 @@ public class DiscordCommand {
                                 return 1;
                             }
                             var player = context.getSource().getPlayer();
+                            if (player == null) {
+                                context.getSource().sendFeedback(() -> Text.of("This command can only be executed by players."), false);
+                                return 1;
+                            }
                             var playerData = PlayerMeta.getPlayer(player);
                             var snowflake = playerData.get(PlayerMeta.KEYS.discordId);
                             if (snowflake == null) {
@@ -85,21 +93,22 @@ public class DiscordCommand {
                             }
 
                             var client = RccDiscord.getInstance().getClient();
-                            if (client.role() != null) {
+                            if (client.getRole() != null) {
                                 var guild = client.guild();
                                 var member = guild.getMemberById(snowflake);
                                 try {
-                                    guild.removeRoleFromMember(member, client.role()).queue();
+                                    assert member != null;
+                                    guild.removeRoleFromMember(member, client.getRole()).queue();
                                 } catch (InsufficientPermissionException e) {
-                                    RccDiscord.LOGGER.error("Could not remove role from player", e);
+                                    RccDiscord.LOGGER.error("Could not remove getRole from player", e);
+                                } catch (AssertionError e) {
+                                    RccDiscord.LOGGER.error("Could not find linked Discord member!", e);
                                 }
                             }
 
                             // Remove the permission node to the MC player
                             var luckperms = RccLibrary.getInstance().luckPerms();
-                            luckperms.getUserManager().modifyUser(player.getUuid(), user -> {
-                                user.data().remove(Node.builder(RccDiscord.CONFIG.linkedPermissionNode).build());
-                            });
+                            luckperms.getUserManager().modifyUser(player.getUuid(), user -> user.data().remove(Node.builder(RccDiscord.CONFIG.linkedPermissionNode).build()));
 
                             RccDiscord.discordLinks.remove(snowflake);
                             playerData.delete(PlayerMeta.KEYS.discordId).join();
@@ -117,7 +126,7 @@ public class DiscordCommand {
         String code;
         do {
             code = String.format("%06d", randomInt(0, 999999));
-        } while (RccDiscord.linkCodes.containsKey(code));
+        } while (RccDiscord.linkCodes.getIfPresent(code) != null);
 
         return code;
     }

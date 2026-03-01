@@ -15,21 +15,21 @@ public class BridgeEvents {
     public static void register(RccDiscord bridge) {
         var client = bridge.getClient();
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
             bridge.sendServerStatus(":hourglass: **Server is starting...**", NamedTextColor.YELLOW.value());
             bridge.setStatus(OnlineStatus.DO_NOT_DISTURB, Activity.watching("the server starting"));
         });
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
             bridge.sendServerStatus(":up: **Server started!**", NamedTextColor.GREEN.value());
             updatePlayerCount(0);
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
             bridge.sendServerStatus(":electric_plug: **Server is stopping!**", NamedTextColor.RED.value());
             bridge.setStatus(OnlineStatus.DO_NOT_DISTURB, Activity.watching("the server stopping"));
@@ -47,7 +47,7 @@ public class BridgeEvents {
         });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
             var playerName = handler.player.getDisplayName().getString();
             bridge.sendPlayerStatus(String.format("%s joined the server", playerName), NamedTextColor.GREEN.value(), Utils.getAvatarThumbnailUrl(handler.player));
@@ -55,7 +55,7 @@ public class BridgeEvents {
         });
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
             var playerName = handler.player.getDisplayName().getString();
             bridge.sendPlayerStatus(String.format("%s left the server", playerName), NamedTextColor.RED.value(), Utils.getAvatarThumbnailUrl(handler.player));
@@ -63,7 +63,7 @@ public class BridgeEvents {
         });
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
             if (!(entity instanceof ServerPlayerEntity player))
                 return;
@@ -75,7 +75,7 @@ public class BridgeEvents {
         });
 
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
-            if (!client.isReady())
+            if (client.isNotReady())
                 return;
 
             var playerName = sender.getDisplayName().getString();
