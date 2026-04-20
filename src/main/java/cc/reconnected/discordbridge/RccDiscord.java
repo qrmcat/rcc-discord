@@ -66,7 +66,6 @@ public class RccDiscord implements ModInitializer {
         return mcServer;
     }
 
-    public static final HashMap<String, ServerPlayerEntity> linkCodes = new HashMap<>();
     public static final Cache<@NotNull String, UUID> linkCodes = Caffeine.newBuilder().expireAfterWrite(Duration.ofMinutes(5)).maximumSize(1024).build();
 
     /**
