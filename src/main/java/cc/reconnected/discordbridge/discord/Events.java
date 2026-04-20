@@ -5,27 +5,37 @@ import cc.reconnected.discordbridge.RccDiscord;
 import cc.reconnected.discordbridge.events.DiscordMessageEvents;
 import cc.reconnected.discordbridge.ChatComponents;
 import cc.reconnected.discordbridge.parser.MentionNodeParser;
+import cc.reconnected.library.RccLibrary;
 import cc.reconnected.library.data.PlayerMeta;
 import cc.reconnected.library.text.parser.MarkdownParser;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import eu.pb4.placeholders.api.parsers.NodeParser;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageReference;
 import net.dv8tion.jda.api.entities.MessageType;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.message.GenericMessageEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.message.MessageUpdateEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
+import net.luckperms.api.node.Node;
 import net.minecraft.text.Text;
+import net.minecraft.util.Pair;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+import static cc.reconnected.discordbridge.RccDiscord.CONFIG;
 
 public class Events {
-    private final HashMap<String, String> messageCache = new HashMap<>();
+    private final Cache<String, String> messageCache = Caffeine.newBuilder().maximumSize(5000).build();
 
     private boolean isActuallyEdited(String id, String content) {
         MessageDigest messageDigest;
@@ -38,13 +48,8 @@ public class Events {
 
         var digest = new String(messageDigest.digest(content.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
 
-        if (!messageCache.containsKey(id)) {
+        if (!Objects.equals(messageCache.get(id, (k) -> digest), digest)) {
             messageCache.put(id, digest);
-            return false;
-        }
-
-        if (!messageCache.get(id).equals(content)) {
-            messageCache.put(id, content);
             return true;
         }
 
@@ -52,35 +57,35 @@ public class Events {
     }
 
     public void onMessageCreate(MessageReceivedEvent event) {
-        var message = event.getMessage();
-        var channel = message.getChannel();
-        if (!channel.getId().equals(RccDiscord.CONFIG.channelId))
-            return;
-
-        var member = event.getMember();
-        if (member == null)
-            return;
-
-        if (member.getUser().isBot())
-            return;
-
-        buildMessage(message, member, false);
+        var pair = getMessageAndMemberFromEvent(event);
+        if (pair == null) return;
+        buildMessage(pair.getLeft(), pair.getRight(), false);
     }
 
     public void onMessageEdit(MessageUpdateEvent event) {
-        var message = event.getMessage();
-        var channel = message.getChannel();
-        if (!channel.getId().equals(RccDiscord.CONFIG.channelId))
-            return;
+        var pair = getMessageAndMemberFromEvent(event);
+        if (pair == null) return;
+        buildMessage(pair.getLeft(), pair.getRight(), true);
+    }
 
-        var member = event.getMember();
-        if (member == null)
-            return;
-
-        if (member.getUser().isBot())
-            return;
-
-        buildMessage(message, member, true);
+    private Pair<Message, Member> getMessageAndMemberFromEvent(GenericMessageEvent event) {
+        if (!event.getChannel().getId().equals(CONFIG.channelId))
+            return null;
+        switch (event.getClass().getSimpleName()) {
+            case "MessageReceivedEvent" -> {
+                var receivedEvent = (MessageReceivedEvent) event;
+                if (receivedEvent.getMember() == null || receivedEvent.getMember().getUser().isBot())
+                    return null;
+                return new Pair<>(receivedEvent.getMessage(), receivedEvent.getMember());
+            }
+            case "MessageUpdateEvent" -> {
+                var updateEvent = (MessageUpdateEvent) event;
+                if (updateEvent.getMember() == null || updateEvent.getMember().getUser().isBot())
+                    return null;
+                return new Pair<>(updateEvent.getMessage(), updateEvent.getMember());
+            }
+        }
+        return null;
     }
 
     public void buildMessage(Message message, Member member, boolean isEdited) {
@@ -105,7 +110,7 @@ public class Events {
         var memberComponent = ChatComponents.makeUser(member.getEffectiveName(), member.getAsMention() + ": ", memberColor, Component.empty());
         Component replyComponent = null;
 
-        if (message.getType() == MessageType.INLINE_REPLY && message.getReferencedMessage() != null) {
+        if ((message.getType() == MessageType.INLINE_REPLY) && message.getReferencedMessage() != null) {
             var referencedMessage = message.getReferencedMessage();
             Component referenceMemberComponent;
             var referenceMember = referencedMessage.getMember();
@@ -127,8 +132,15 @@ public class Events {
 
             replyComponent = ChatComponents.makeReplyHeader(referenceMemberComponent, Component.text(referencedMessage.getContentDisplay()));
         }
+        Component forwardComponent = null;
+        if (message.getMessageReference() != null && message.getMessageReference().getType() == MessageReference.MessageReferenceType.FORWARD && !message.getMessageSnapshots().isEmpty()) {
+            forwardComponent = ChatComponents.makeForwardHeader(Component.text(message.getMessageSnapshots().get(0).getContentRaw()));
+        }
 
         var messageContent = message.getContentRaw();
+        for (Map.Entry<String, String> entry : RccDiscord.CONFIG.autoReplacementsD2M.entrySet()) {
+                messageContent = messageContent.replaceAll(entry.getKey(), entry.getValue());
+        }
         Component messageComponent = Component.empty();
 
         var parser = NodeParser.merge(new MentionNodeParser(message), MarkdownParser.defaultParser);
@@ -148,7 +160,7 @@ public class Events {
             messageComponent = messageComponent.appendSpace();
         }
 
-        var outputComponent = ChatComponents.makeMessage(memberComponent, replyComponent, messageComponent);
+        var outputComponent = ChatComponents.makeMessage(memberComponent, replyComponent, forwardComponent, messageComponent);
 
         if (isEdited) {
             outputComponent = outputComponent.append(Component.text("(edited)", NamedTextColor.GRAY));
@@ -175,42 +187,57 @@ public class Events {
         }
 
         var code = codeOption.getAsString();
+        var playerUuid = RccDiscord.linkCodes.getIfPresent(code);
 
-        if (!RccDiscord.linkCodes.containsKey(code)) {
+        if (playerUuid == null) {
             event.reply("Code not found! Run the `/discord link` command in-game to obtain a link code.")
                     .setEphemeral(true).queue();
             return;
         }
 
-        var player = RccDiscord.linkCodes.get(code);
+        var playerOpt = RccDiscord.getInstance().getPlayer(playerUuid);
+        if (playerOpt.isEmpty()) {
+            event.reply("You must be online to link your Discord profile!")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        var player = playerOpt.get();
+
         var playerData = PlayerMeta.getPlayer(player);
 
-        RccDiscord.discordLinks.put(event.getUser().getId(), player.getUuid());
+        RccDiscord.discordLinks.put(event.getUser().getId(), playerUuid);
         playerData.set(PlayerMeta.KEYS.discordId, event.getUser().getId()).join();
 
         RccDiscord.getInstance().saveData();
 
         var client = RccDiscord.getInstance().getClient();
         var member = event.getMember();
-        if (client.role() != null) {
+        if (member == null) {
+            event.reply("You must run this command in a server channel to link your profile!")
+                    .setEphemeral(true).queue();
+            return;
+        }
+        var clientRole = client.getRole();
+        // Add the getRole
+        if (clientRole != null) {
             try {
-                client.guild().addRoleToMember(member, client.role()).reason("Linked via link code").queue();
+                client.guild().addRoleToMember(member, clientRole).reason("Linked via link code").queue((Void unused) -> member.modifyNickname(playerData.getUsername()).reason("Linked via link code").queue(this::onSuccess,this::onFailure),this::onFailure);
             } catch (Exception e) {
-                RccDiscord.LOGGER.error("Could not add role to player", e);
+                RccDiscord.LOGGER.error("Could not finish effect on player", e);
             }
+        } else {
+            member.modifyNickname(playerData.getUsername()).reason("Linked via link code").queue(this::onSuccess,this::onFailure);
         }
 
-        try {
-            member.modifyNickname(playerData.getUsername()).reason("Linked via link code");
-        } catch(Exception e) {
-            RccDiscord.LOGGER.error("Could not modify nickname", e);
-        }
+        // Give the permission node to the MC player
+        var luckperms = RccLibrary.getInstance().luckPerms();
+        luckperms.getUserManager().modifyUser(playerUuid, user -> user.data().add(Node.builder(CONFIG.linkedPermissionNode).build()));
 
-        RccDiscord.linkCodes.remove(code);
+        RccDiscord.linkCodes.invalidate(code);
 
         event.reply("Your Discord profile is now linked with **" + playerData.getUsername() + "**!")
                 .setEphemeral(true).queue();
-
 
         var text = Component.empty()
                 .append(Component.text("You linked your profile to "))
@@ -220,6 +247,15 @@ public class Events {
                 .color(NamedTextColor.GREEN);
 
         player.sendMessage(text);
+        RccDiscord.LOGGER.info("Player {} linked their profile to Discord user {}", playerData.getUsername(), member.getEffectiveName());
+    }
+
+    private void onSuccess(Void unused) {
+
+    }
+
+    private <T extends Throwable>void onFailure(T throwable) {
+        RccDiscord.LOGGER.error("Failed to execute Discord action", throwable);
     }
 
     private void onListCommand(SlashCommandInteractionEvent event) {

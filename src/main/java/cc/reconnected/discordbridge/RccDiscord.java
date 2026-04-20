@@ -7,6 +7,8 @@ import club.minnced.discord.webhook.send.AllowedMentions;
 import club.minnced.discord.webhook.send.WebhookEmbed;
 import club.minnced.discord.webhook.send.WebhookEmbedBuilder;
 import club.minnced.discord.webhook.send.WebhookMessageBuilder;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import net.dv8tion.jda.api.OnlineStatus;
@@ -20,6 +22,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.WorldSavePath;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,9 +32,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Queue;
-import java.util.UUID;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -64,7 +66,7 @@ public class RccDiscord implements ModInitializer {
         return mcServer;
     }
 
-    public static final HashMap<String, ServerPlayerEntity> linkCodes = new HashMap<>();
+    public static final Cache<@NotNull String, UUID> linkCodes = Caffeine.newBuilder().expireAfterWrite(Duration.ofMinutes(5)).maximumSize(1024).build();
 
     /**
      * Discord snowflake ID -> Player UUID
@@ -164,7 +166,7 @@ public class RccDiscord implements ModInitializer {
     }
 
     public void sendServerStatus(String message, int color) {
-        if (!client.isReady())
+        if (client.isNotReady())
             return;
         var embed = new WebhookEmbedBuilder()
                 .setDescription(message)
@@ -174,7 +176,7 @@ public class RccDiscord implements ModInitializer {
     }
 
     public void sendPlayerStatus(String message, int color, String avatarUrl) {
-        if (!client.isReady())
+        if (client.isNotReady())
             return;
         var embed = new WebhookEmbedBuilder()
                 .setAuthor(new WebhookEmbed.EmbedAuthor(message, avatarUrl, null))
@@ -184,8 +186,11 @@ public class RccDiscord implements ModInitializer {
     }
 
     public void sendPlayerMessage(String message, String name, String avatarUrl) {
-        if (!client.isReady())
+        if (client.isNotReady())
             return;
+        for (Map.Entry<String, String> replacement : CONFIG.autoReplacementsM2D.entrySet()) {
+            message = message.replaceAll(replacement.getKey(), replacement.getValue());
+        }
         var webhookMessage = new WebhookMessageBuilder()
                 .setAvatarUrl(avatarUrl)
                 .setUsername(name)
@@ -193,7 +198,7 @@ public class RccDiscord implements ModInitializer {
                 .setAllowedMentions(
                         new AllowedMentions()
                                 .withParseUsers(true)
-                                .withParseRoles(true)
+                                .withRoles(CONFIG.allowedRoleMentions)
                                 .withParseEveryone(false)
                 )
                 .build();
@@ -219,5 +224,10 @@ public class RccDiscord implements ModInitializer {
 
     public String[] getPlayerNames() {
         return mcServer.getPlayerManager().getPlayerNames();
+    }
+
+    public Optional<ServerPlayerEntity> getPlayer(UUID uuid) {
+        var player = mcServer.getPlayerManager().getPlayer(uuid);
+        return Optional.ofNullable(player);
     }
 }
