@@ -28,6 +28,7 @@ public class RccDiscordConfig {
     public boolean enableSlashCommands = true;
     public boolean enableItemPreviews = true;
     public String itemPreviewToken = "[item]";
+    public String itemPreviewThumbnailUrl = "https://api.reconnected.cc/assets/{mod}/{item}.png";
     public int itemPreviewMaxTooltipLines = 6;
     public String linkedPermissionNode = "rcc.chatbox.linked";
 
