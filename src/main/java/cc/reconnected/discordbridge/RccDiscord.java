@@ -258,7 +258,7 @@ public class RccDiscord implements ModInitializer {
         var itemId = Registries.ITEM.getId(stack.getItem());
         var builder = new WebhookEmbedBuilder()
                 .setTitle(new WebhookEmbed.EmbedTitle(title, null))
-                .setThumbnailUrl("https://cdn.krawlet.cc/" + itemId.getNamespace() + "/" + itemId.getPath() + ".png")
+                .setThumbnailUrl(makeItemThumbnailUrl(itemId.getNamespace(), itemId.getPath()))
                 .setFooter(new WebhookEmbed.EmbedFooter(itemId.toString(), null))
                 .setColor(0x5865F2);
         if (!descriptionText.isEmpty()) {
@@ -278,10 +278,16 @@ public class RccDiscord implements ModInitializer {
     private WebhookEmbed makeEmptyItemEmbed() {
         return new WebhookEmbedBuilder()
                 .setTitle(new WebhookEmbed.EmbedTitle("Air", null))
-                .setThumbnailUrl("https://cdn.krawlet.cc/minecraft/air.png")
+                .setThumbnailUrl(makeItemThumbnailUrl("minecraft", "air"))
                 .setFooter(new WebhookEmbed.EmbedFooter("minecraft:air", null))
                 .setColor(0x5865F2)
                 .build();
+    }
+
+    private static String makeItemThumbnailUrl(String mod, String item) {
+        return CONFIG.itemPreviewThumbnailUrl
+                .replace("{mod}", mod)
+                .replace("{item}", item);
     }
 
     private static String replaceItemToken(String message, String itemName) {
