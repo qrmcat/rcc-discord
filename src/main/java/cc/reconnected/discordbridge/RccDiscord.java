@@ -17,8 +17,9 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.client.item.TooltipContext;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.tooltip.TooltipType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.server.MinecraftServer;
@@ -236,7 +237,7 @@ public class RccDiscord implements ModInitializer {
     }
 
     private WebhookEmbed makeItemEmbed(ItemStack stack, ServerPlayerEntity player, String itemName) {
-        var tooltip = stack.getTooltip(player, TooltipContext.BASIC)
+        var tooltip = stack.getTooltip(Item.TooltipContext.DEFAULT, player, TooltipType.BASIC)
                 .stream()
                 .map(Text::getString)
                 .filter(line -> !line.isBlank())
